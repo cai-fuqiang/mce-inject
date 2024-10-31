@@ -145,6 +145,11 @@ struct thread {
 };
 
 volatile int blocked;
+void dump_mce(struct mce *m);
+void my_dump_mce(struct mce *m)
+{
+        dump_mce(m);
+}
 
 static void *injector(void *data)
 {
@@ -157,7 +162,8 @@ static void *injector(void *data)
 	
 	while (blocked)
 		barrier();
-
+        printf("enter injector, dump mce...\n");
+        my_dump_mce(t->m);
 	write_mce(t->fd, t->m);
 	return NULL;
 }
@@ -185,13 +191,17 @@ void do_inject_mce(int fd, struct mce *m)
 		struct thread *t;
 
 		NEW(t);
+                printf("inject cpu is %d\n", cpu);
 		if (cpu == m->extcpu) {
 			t->m = m;
 			if (MCJ_CTX(m->inject_flags) == MCJ_CTX_RANDOM)
 				MCJ_CTX_SET(m->inject_flags, MCJ_CTX_PROCESS);
+                        printf("inject cpu is extcpu, inject flags is %d", m->inject_flags);
 		} else if (cpu_mce[i])
 			t->m = cpu_mce[i];
+                        printf("cpu_mce[%d] is not null\n", i);
 		else if (mce_flags & MCE_NOBROADCAST) {
+                        printf("mce_flags is NO BROADCAST, so not inject\n");
 			free(t);
 			continue;
 		} else {
@@ -203,6 +213,7 @@ void do_inject_mce(int fd, struct mce *m)
 		if (no_random && MCJ_CTX(t->m->inject_flags) == MCJ_CTX_RANDOM)
 			MCJ_CTX_SET(t->m->inject_flags, MCJ_CTX_PROCESS);
 		else if (MCJ_CTX(t->m->inject_flags) == MCJ_CTX_RANDOM) {
+                        printf("m->inject_flags has  MCJ_CTX_RANDOM, continue\n");
 			write_mce(fd, t->m);
 			has_random = 1;
 			free(t);
@@ -214,6 +225,7 @@ void do_inject_mce(int fd, struct mce *m)
 		tlist = t;
 
 		t->cpu = cpu;
+                printf("create thread to inject mce\n");
 
 		if (pthread_create(&t->thr, NULL, injector, t))
 			err("pthread_create");
